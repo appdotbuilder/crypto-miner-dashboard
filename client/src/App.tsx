@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Label } from '@/components/ui/label';
-import { AlertCircle, Bitcoin, TrendingUp, Wallet, History, Settings, Play, Square, ArrowUpDown, RefreshCw } from 'lucide-react';
+import { AlertCircle, Bitcoin, TrendingUp, Wallet, History, Settings, Play, Square, ArrowUpDown } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { trpc } from '@/utils/trpc';
 import { useState, useEffect, useCallback } from 'react';
@@ -67,97 +67,12 @@ function App() {
   const [miningProgress, setMiningProgress] = useState(0);
   const [miningTimer, setMiningTimer] = useState<number | null>(null);
 
-  // Demo mode state - fallback when server is not available
-  const [demoMode, setDemoMode] = useState(false);
-
-  // Initialize demo data for offline mode
-  const initializeDemoMode = useCallback(() => {
-    setDemoMode(true);
-    setUser({ id: 1, created_at: new Date() });
-    setBalances([
-      { id: 1, user_id: 1, crypto_type: 'BITCOIN', amount: 0.00123456, updated_at: new Date() },
-      { id: 2, user_id: 1, crypto_type: 'ETHEREUM_CLASSIC', amount: 2.5, updated_at: new Date() },
-      { id: 3, user_id: 1, crypto_type: 'DOGECOIN', amount: 100.0, updated_at: new Date() },
-      { id: 4, user_id: 1, crypto_type: 'SOLANA', amount: 5.75, updated_at: new Date() },
-      { id: 5, user_id: 1, crypto_type: 'TETHER', amount: 50.0, updated_at: new Date() }
-    ]);
-    setMiningSession({
-      id: 1,
-      user_id: 1,
-      status: 'STOPPED',
-      mining_balance: 0.00005678,
-      started_at: null,
-      stopped_at: new Date(),
-      created_at: new Date()
-    });
-    setTransactions([
-      {
-        id: 1,
-        user_id: 1,
-        transaction_type: 'MINING_WITHDRAWAL',
-        crypto_type: 'BITCOIN',
-        amount: 0.00012345,
-        from_crypto_type: null,
-        to_crypto_type: null,
-        created_at: new Date(Date.now() - 3600000)
-      },
-      {
-        id: 2,
-        user_id: 1,
-        transaction_type: 'SWAP_FROM',
-        crypto_type: 'BITCOIN',
-        amount: 0.001,
-        from_crypto_type: 'BITCOIN',
-        to_crypto_type: 'ETHEREUM_CLASSIC',
-        created_at: new Date(Date.now() - 7200000)
-      },
-      {
-        id: 3,
-        user_id: 1,
-        transaction_type: 'SWAP_TO',
-        crypto_type: 'ETHEREUM_CLASSIC',
-        amount: 0.001,
-        from_crypto_type: 'BITCOIN',
-        to_crypto_type: 'ETHEREUM_CLASSIC',
-        created_at: new Date(Date.now() - 7200000)
-      }
-    ]);
-    setWalletAddresses([
-      {
-        id: 1,
-        user_id: 1,
-        crypto_type: 'BITCOIN',
-        address: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
-        created_at: new Date(),
-        updated_at: new Date()
-      },
-      {
-        id: 2,
-        user_id: 1,
-        crypto_type: 'ETHEREUM_CLASSIC',
-        address: '0x742d35Cc6634C0532925a3b8D35612345dCf3d8bE',
-        created_at: new Date(),
-        updated_at: new Date()
-      }
-    ]);
-    setSwapForm(prev => ({ ...prev, user_id: 1 }));
-    setWalletForm(prev => ({ ...prev, user_id: 1 }));
-    setError('Server unavailable. Running in demo mode with sample data.');
-    setIsLoading(false);
-  }, []);
-
-  // Initialize app - try server once, then fallback to demo mode immediately
+  // Initialize app - connect to backend
   const initializeApp = useCallback(async () => {
     setIsLoading(true);
     
     try {
-      // Single attempt to connect to server with short timeout
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Connection timeout')), 3000)
-      );
-      
-      const userPromise = trpc.createUser.mutate({});
-      const newUser = await Promise.race([userPromise, timeoutPromise]) as User;
+      const newUser = await trpc.createUser.mutate({});
       
       // If successful, load user data
       setUser(newUser);
@@ -178,12 +93,12 @@ function App() {
       setWalletAddresses(walletsData);
       
       setIsLoading(false);
-      setDemoMode(false);
     } catch (error) {
-      console.error('Server connection failed, switching to demo mode:', error);
-      initializeDemoMode();
+      console.error('Failed to initialize app:', error);
+      setError('Failed to connect to server. Please try again.');
+      setIsLoading(false);
     }
-  }, [initializeDemoMode]);
+  }, []);
 
   useEffect(() => {
     initializeApp();
@@ -213,71 +128,9 @@ function App() {
     }
   }, [miningSession?.status, miningTimer]);
 
-  // Demo mode handlers
-  const handleDemoStartMining = () => {
-    setMiningSession(prev => prev ? {
-      ...prev,
-      status: 'ACTIVE',
-      started_at: new Date(),
-      mining_balance: prev.mining_balance + 0.00001 // Simulate some mining
-    } : null);
-    setMiningProgress(0);
-  };
-
-  const handleDemoStopMining = () => {
-    setMiningSession(prev => prev ? {
-      ...prev,
-      status: 'STOPPED',
-      stopped_at: new Date(),
-      mining_balance: prev.mining_balance + 0.00002 // Add some mined amount
-    } : null);
-  };
-
-  const handleDemoWithdraw = () => {
-    if (!miningSession?.mining_balance) return;
-    
-    const withdrawAmount = miningSession.mining_balance;
-    setBalances(prev => {
-      const existingBitcoin = prev.find(b => b.crypto_type === 'BITCOIN');
-      if (existingBitcoin) {
-        return prev.map(b => 
-          b.crypto_type === 'BITCOIN' 
-            ? { ...b, amount: b.amount + withdrawAmount, updated_at: new Date() }
-            : b
-        );
-      } else {
-        return [...prev, {
-          id: prev.length + 1,
-          user_id: 1,
-          crypto_type: 'BITCOIN',
-          amount: withdrawAmount,
-          updated_at: new Date()
-        }];
-      }
-    });
-    
-    setTransactions(prev => [{
-      id: prev.length + 1,
-      user_id: 1,
-      transaction_type: 'MINING_WITHDRAWAL',
-      crypto_type: 'BITCOIN',
-      amount: withdrawAmount,
-      from_crypto_type: null,
-      to_crypto_type: null,
-      created_at: new Date()
-    }, ...prev]);
-    
-    setMiningSession(prev => prev ? { ...prev, mining_balance: 0 } : null);
-  };
-
   // Mining operations
   const handleStartMining = async () => {
     if (!user) return;
-    
-    if (demoMode) {
-      handleDemoStartMining();
-      return;
-    }
     
     setIsLoading(true);
     try {
@@ -297,11 +150,6 @@ function App() {
   const handleStopMining = async () => {
     if (!user) return;
     
-    if (demoMode) {
-      handleDemoStopMining();
-      return;
-    }
-    
     setIsLoading(true);
     try {
       await trpc.stopMining.mutate({ user_id: user.id });
@@ -317,11 +165,6 @@ function App() {
 
   const handleWithdrawMining = async () => {
     if (!user) return;
-    
-    if (demoMode) {
-      handleDemoWithdraw();
-      return;
-    }
     
     setIsLoading(true);
     try {
@@ -348,52 +191,6 @@ function App() {
     e.preventDefault();
     if (!user || swapForm.amount <= 0) return;
     
-    if (demoMode) {
-      // Demo swap logic
-      const fromBalance = getBalance(swapForm.from_crypto);
-      if (swapForm.amount > fromBalance) {
-        setError('Insufficient balance for swap');
-        return;
-      }
-      
-      setBalances(prev => prev.map(b => {
-        if (b.crypto_type === swapForm.from_crypto) {
-          return { ...b, amount: b.amount - swapForm.amount, updated_at: new Date() };
-        }
-        if (b.crypto_type === swapForm.to_crypto) {
-          return { ...b, amount: b.amount + swapForm.amount, updated_at: new Date() };
-        }
-        return b;
-      }));
-      
-      setTransactions(prev => [
-        {
-          id: prev.length + 1,
-          user_id: 1,
-          transaction_type: 'SWAP_FROM',
-          crypto_type: swapForm.from_crypto,
-          amount: swapForm.amount,
-          from_crypto_type: swapForm.from_crypto,
-          to_crypto_type: swapForm.to_crypto,
-          created_at: new Date()
-        },
-        {
-          id: prev.length + 2,
-          user_id: 1,
-          transaction_type: 'SWAP_TO',
-          crypto_type: swapForm.to_crypto,
-          amount: swapForm.amount,
-          from_crypto_type: swapForm.from_crypto,
-          to_crypto_type: swapForm.to_crypto,
-          created_at: new Date()
-        },
-        ...prev
-      ]);
-      
-      setSwapForm(prev => ({ ...prev, amount: 0 }));
-      return;
-    }
-    
     setIsLoading(true);
     try {
       await trpc.swapCrypto.mutate(swapForm);
@@ -418,30 +215,6 @@ function App() {
     e.preventDefault();
     if (!user || !walletForm.address.trim()) return;
     
-    if (demoMode) {
-      setWalletAddresses(prev => {
-        const existing = prev.find(w => w.crypto_type === walletForm.crypto_type);
-        if (existing) {
-          return prev.map(w => 
-            w.crypto_type === walletForm.crypto_type 
-              ? { ...w, address: walletForm.address, updated_at: new Date() }
-              : w
-          );
-        } else {
-          return [...prev, {
-            id: prev.length + 1,
-            user_id: 1,
-            crypto_type: walletForm.crypto_type,
-            address: walletForm.address,
-            created_at: new Date(),
-            updated_at: new Date()
-          }];
-        }
-      });
-      setWalletForm(prev => ({ ...prev, address: '' }));
-      return;
-    }
-    
     setIsLoading(true);
     try {
       await trpc.saveWalletAddress.mutate(walletForm);
@@ -454,18 +227,6 @@ function App() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Retry connection
-  const handleRetryConnection = () => {
-    setDemoMode(false);
-    setError(null);
-    setUser(null);
-    setBalances([]);
-    setMiningSession(null);
-    setTransactions([]);
-    setWalletAddresses([]);
-    initializeApp();
   };
 
   // Get balance for specific crypto
@@ -499,36 +260,18 @@ function App() {
           <p className="text-gray-600 text-lg">
             Mine Bitcoin • Manage Cryptocurrencies • Track Transactions
           </p>
-          {demoMode && (
-            <div className="mt-4 flex items-center justify-center gap-2">
-              <Badge variant="outline" className="bg-yellow-50 border-yellow-200 text-yellow-800">
-                🎮 Demo Mode - Interactive sample data
-              </Badge>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={handleRetryConnection}
-                className="text-blue-600 hover:text-blue-800"
-              >
-                <RefreshCw className="w-4 h-4 mr-1" />
-                Retry Server Connection
-              </Button>
-            </div>
-          )}
         </div>
 
         {error && (
-          <Alert className="mb-6 border-amber-200 bg-amber-50">
-            <AlertCircle className="h-4 w-4 text-amber-500" />
-            <AlertTitle className="text-amber-700">
-              {demoMode ? 'Demo Mode Active' : 'Notice'}
-            </AlertTitle>
-            <AlertDescription className="text-amber-700">
+          <Alert className="mb-6 border-red-200 bg-red-50">
+            <AlertCircle className="h-4 w-4 text-red-500" />
+            <AlertTitle className="text-red-700">Error</AlertTitle>
+            <AlertDescription className="text-red-700">
               {error}
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="ml-2 h-auto p-0 text-amber-700 hover:text-amber-800"
+                className="ml-2 h-auto p-0 text-red-700 hover:text-red-800"
                 onClick={() => setError(null)}
               >
                 Dismiss
@@ -568,7 +311,6 @@ function App() {
                 <CardTitle className="flex items-center gap-2">
                   <Bitcoin className="w-6 h-6" />
                   Bitcoin Mining Station
-                  {demoMode && <Badge variant="secondary" className="ml-2 bg-yellow-100 text-yellow-800">Demo</Badge>}
                 </CardTitle>
                 <CardDescription className="text-orange-100">
                   Start mining Bitcoin and watch your balance grow
@@ -671,7 +413,6 @@ function App() {
                 <CardTitle className="flex items-center gap-2">
                   <Wallet className="w-6 h-6" />
                   Cryptocurrency Balances
-                  {demoMode && <Badge variant="secondary" className="ml-2 bg-yellow-100 text-yellow-800">Demo</Badge>}
                 </CardTitle>
                 <CardDescription>
                   View all your cryptocurrency holdings
@@ -714,7 +455,6 @@ function App() {
                 <CardTitle className="flex items-center gap-2">
                   <ArrowUpDown className="w-6 h-6" />
                   Cryptocurrency Swap
-                  {demoMode && <Badge variant="secondary" className="ml-2 bg-yellow-100 text-yellow-800">Demo</Badge>}
                 </CardTitle>
                 <CardDescription>
                   Exchange one cryptocurrency for another
@@ -827,7 +567,6 @@ function App() {
                 <CardTitle className="flex items-center gap-2">
                   <History className="w-6 h-6" />
                   Transaction History
-                  {demoMode && <Badge variant="secondary" className="ml-2 bg-yellow-100 text-yellow-800">Demo</Badge>}
                 </CardTitle>
                 <CardDescription>
                   View all your cryptocurrency transactions
@@ -893,7 +632,6 @@ function App() {
                 <CardTitle className="flex items-center gap-2">
                   <Settings className="w-6 h-6" />
                   Wallet Addresses
-                  {demoMode && <Badge variant="secondary" className="ml-2 bg-yellow-100 text-yellow-800">Demo</Badge>}
                 </CardTitle>
                 <CardDescription>
                   Manage your cryptocurrency wallet addresses
