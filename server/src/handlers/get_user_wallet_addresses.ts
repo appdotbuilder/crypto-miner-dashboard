@@ -1,18 +1,19 @@
 
+import { db } from '../db';
+import { walletAddressesTable } from '../db/schema';
 import { type GetUserWalletAddressesInput, type WalletAddress } from '../schema';
+import { eq } from 'drizzle-orm';
 
-export async function getUserWalletAddresses(input: GetUserWalletAddressesInput): Promise<WalletAddress[]> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is retrieving all saved wallet addresses for a user.
-    // It should return wallet addresses for all cryptocurrencies the user has saved.
-    return Promise.resolve([
-        {
-            id: 1,
-            user_id: input.user_id,
-            crypto_type: 'BITCOIN' as const,
-            address: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
-            created_at: new Date(),
-            updated_at: new Date()
-        }
-    ] as WalletAddress[]);
-}
+export const getUserWalletAddresses = async (input: GetUserWalletAddressesInput): Promise<WalletAddress[]> => {
+  try {
+    const results = await db.select()
+      .from(walletAddressesTable)
+      .where(eq(walletAddressesTable.user_id, input.user_id))
+      .execute();
+
+    return results;
+  } catch (error) {
+    console.error('Failed to get user wallet addresses:', error);
+    throw error;
+  }
+};

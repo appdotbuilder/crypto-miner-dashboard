@@ -1,20 +1,24 @@
 
+import { db } from '../db';
+import { transactionsTable } from '../db/schema';
 import { type GetUserTransactionsInput, type Transaction } from '../schema';
+import { eq, desc } from 'drizzle-orm';
 
 export async function getUserTransactions(input: GetUserTransactionsInput): Promise<Transaction[]> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is retrieving all transaction history for a user.
-    // It should return transactions ordered by created_at desc (most recent first).
-    return Promise.resolve([
-        {
-            id: 1,
-            user_id: input.user_id,
-            transaction_type: 'MINING_WITHDRAWAL' as const,
-            crypto_type: 'BITCOIN' as const,
-            amount: 0.001,
-            from_crypto_type: null,
-            to_crypto_type: null,
-            created_at: new Date()
-        }
-    ] as Transaction[]);
+  try {
+    const results = await db.select()
+      .from(transactionsTable)
+      .where(eq(transactionsTable.user_id, input.user_id))
+      .orderBy(desc(transactionsTable.created_at))
+      .execute();
+
+    // Convert numeric fields back to numbers
+    return results.map(transaction => ({
+      ...transaction,
+      amount: parseFloat(transaction.amount)
+    }));
+  } catch (error) {
+    console.error('Failed to get user transactions:', error);
+    throw error;
+  }
 }

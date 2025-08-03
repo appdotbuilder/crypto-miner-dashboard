@@ -1,17 +1,30 @@
 
+import { db } from '../db';
+import { miningSessionsTable } from '../db/schema';
 import { type GetMiningSessionInput, type MiningSession } from '../schema';
+import { eq, desc } from 'drizzle-orm';
 
-export async function getMiningSession(input: GetMiningSessionInput): Promise<MiningSession | null> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is retrieving the current mining session for a user.
-    // It should return the latest mining session or null if none exists.
-    return Promise.resolve({
-        id: 1,
-        user_id: input.user_id,
-        status: 'STOPPED' as const,
-        mining_balance: 0.001,
-        started_at: new Date(Date.now() - 3600000),
-        stopped_at: new Date(),
-        created_at: new Date(Date.now() - 3600000)
-    } as MiningSession);
-}
+export const getMiningSession = async (input: GetMiningSessionInput): Promise<MiningSession | null> => {
+  try {
+    // Get the latest mining session for the user
+    const result = await db.select()
+      .from(miningSessionsTable)
+      .where(eq(miningSessionsTable.user_id, input.user_id))
+      .orderBy(desc(miningSessionsTable.created_at))
+      .limit(1)
+      .execute();
+
+    if (result.length === 0) {
+      return null;
+    }
+
+    const session = result[0];
+    return {
+      ...session,
+      mining_balance: parseFloat(session.mining_balance) // Convert numeric to number
+    };
+  } catch (error) {
+    console.error('Get mining session failed:', error);
+    throw error;
+  }
+};
