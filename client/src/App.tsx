@@ -23,6 +23,11 @@ import type {
   SaveWalletAddressInput 
 } from '../../server/src/schema';
 
+// Mining rates (Bitcoin per second)
+const miningRates = {
+  BITCOIN: 0.001 // Increased from 0.0000000001 to make mining profit more visible
+};
+
 // Cryptocurrency display information
 const CRYPTO_INFO: Record<CryptoType, { name: string; symbol: string; color: string; emoji: string }> = {
   BITCOIN: { name: 'Bitcoin', symbol: 'BTC', color: 'bg-orange-500', emoji: '₿' },
@@ -111,6 +116,17 @@ function App() {
         setMiningProgress(prev => {
           const newProgress = prev + 1.67; // ~1.67% per second = 100% per minute
           return newProgress > 100 ? 100 : newProgress;
+        });
+        
+        // Update mining balance in real-time using the mining rate
+        setMiningSession(prev => {
+          if (!prev) return prev;
+          const currentBalance = prev.mining_balance || 0;
+          const newBalance = currentBalance + miningRates.BITCOIN; // Add Bitcoin mining rate per second
+          return {
+            ...prev,
+            mining_balance: newBalance
+          };
         });
       }, 1000);
       setMiningTimer(timer);
