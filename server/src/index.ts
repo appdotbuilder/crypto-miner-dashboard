@@ -16,7 +16,8 @@ import {
   swapCryptoInputSchema,
   getUserTransactionsInputSchema,
   saveWalletAddressInputSchema,
-  getUserWalletAddressesInputSchema
+  getUserWalletAddressesInputSchema,
+  withdrawToWalletInputSchema
 } from './schema';
 
 // Import handlers
@@ -30,6 +31,7 @@ import { swapCrypto } from './handlers/swap_crypto';
 import { getUserTransactions } from './handlers/get_user_transactions';
 import { saveWalletAddress } from './handlers/save_wallet_address';
 import { getUserWalletAddresses } from './handlers/get_user_wallet_addresses';
+import { withdrawToWallet } from './handlers/withdraw_to_wallet';
 
 const t = initTRPC.create({
   transformer: superjson,
@@ -87,6 +89,10 @@ const appRouter = router({
   getUserWalletAddresses: publicProcedure
     .input(getUserWalletAddressesInputSchema)
     .query(({ input }) => getUserWalletAddresses(input)),
+
+  withdrawToWallet: publicProcedure
+    .input(withdrawToWalletInputSchema)
+    .mutation(({ input }) => withdrawToWallet(input)),
 });
 
 export type AppRouter = typeof appRouter;

@@ -21,7 +21,8 @@ export const cryptoTypeEnum = pgEnum('crypto_type', [
 export const transactionTypeEnum = pgEnum('transaction_type', [
   'MINING_WITHDRAWAL',
   'SWAP_FROM',
-  'SWAP_TO'
+  'SWAP_TO',
+  'WITHDRAWAL_TO_WALLET'
 ]);
 
 export const miningStatusEnum = pgEnum('mining_status', ['ACTIVE', 'STOPPED']);

@@ -23,7 +23,8 @@ export type CryptoType = z.infer<typeof cryptoTypeSchema>;
 export const transactionTypeSchema = z.enum([
   'MINING_WITHDRAWAL',
   'SWAP_FROM',
-  'SWAP_TO'
+  'SWAP_TO',
+  'WITHDRAWAL_TO_WALLET'
 ]);
 
 export type TransactionType = z.infer<typeof transactionTypeSchema>;
@@ -143,3 +144,11 @@ export const getUserWalletAddressesInputSchema = z.object({
   user_id: z.number()
 });
 export type GetUserWalletAddressesInput = z.infer<typeof getUserWalletAddressesInputSchema>;
+
+export const withdrawToWalletInputSchema = z.object({
+  user_id: z.number(),
+  crypto_type: cryptoTypeSchema,
+  amount: z.number().positive(),
+  wallet_address: z.string().min(1)
+});
+export type WithdrawToWalletInput = z.infer<typeof withdrawToWalletInputSchema>;
