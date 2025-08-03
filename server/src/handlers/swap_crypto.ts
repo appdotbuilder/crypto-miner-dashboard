@@ -4,21 +4,19 @@ import { balancesTable, transactionsTable } from '../db/schema';
 import { type SwapCryptoInput, type Transaction } from '../schema';
 import { eq, and } from 'drizzle-orm';
 
-export async function swapCrypto(input: SwapCryptoInput): Promise<Transaction[]> {
+export const swapCrypto = async (input: SwapCryptoInput): Promise<Transaction[]> => {
   try {
     // 1. Check if user has sufficient balance in from_crypto
     const fromBalance = await db.select()
       .from(balancesTable)
-      .where(
-        and(
-          eq(balancesTable.user_id, input.user_id),
-          eq(balancesTable.crypto_type, input.from_crypto)
-        )
-      )
+      .where(and(
+        eq(balancesTable.user_id, input.user_id),
+        eq(balancesTable.crypto_type, input.from_crypto)
+      ))
       .execute();
 
     if (fromBalance.length === 0) {
-      throw new Error(`No balance found for crypto type ${input.from_crypto}`);
+      throw new Error(`No balance found for ${input.from_crypto}`);
     }
 
     const currentFromBalance = parseFloat(fromBalance[0].amount);
@@ -26,64 +24,59 @@ export async function swapCrypto(input: SwapCryptoInput): Promise<Transaction[]>
       throw new Error(`Insufficient balance. Available: ${currentFromBalance}, Required: ${input.amount}`);
     }
 
-    // 2. Get or create to_crypto balance
+    // 2. Calculate new balances (using 1:1 swap rate for simplicity)
+    const newFromAmount = currentFromBalance - input.amount;
+
+    // 3. Check if user has existing to_crypto balance
     const toBalance = await db.select()
       .from(balancesTable)
-      .where(
-        and(
-          eq(balancesTable.user_id, input.user_id),
-          eq(balancesTable.crypto_type, input.to_crypto)
-        )
-      )
+      .where(and(
+        eq(balancesTable.user_id, input.user_id),
+        eq(balancesTable.crypto_type, input.to_crypto)
+      ))
       .execute();
 
-    let currentToBalance = 0;
+    let newToAmount = input.amount;
     if (toBalance.length > 0) {
-      currentToBalance = parseFloat(toBalance[0].amount);
+      newToAmount = parseFloat(toBalance[0].amount) + input.amount;
     }
 
-    // 3. Update from_crypto balance (deduct amount)
+    // 4. Update from_crypto balance
     await db.update(balancesTable)
       .set({
-        amount: (currentFromBalance - input.amount).toString(),
+        amount: newFromAmount.toString(),
         updated_at: new Date()
       })
-      .where(
-        and(
-          eq(balancesTable.user_id, input.user_id),
-          eq(balancesTable.crypto_type, input.from_crypto)
-        )
-      )
+      .where(and(
+        eq(balancesTable.user_id, input.user_id),
+        eq(balancesTable.crypto_type, input.from_crypto)
+      ))
       .execute();
 
-    // 4. Update or create to_crypto balance (add amount)
+    // 5. Update or create to_crypto balance
     if (toBalance.length > 0) {
-      // Update existing balance
       await db.update(balancesTable)
         .set({
-          amount: (currentToBalance + input.amount).toString(),
+          amount: newToAmount.toString(),
           updated_at: new Date()
         })
-        .where(
-          and(
-            eq(balancesTable.user_id, input.user_id),
-            eq(balancesTable.crypto_type, input.to_crypto)
-          )
-        )
+        .where(and(
+          eq(balancesTable.user_id, input.user_id),
+          eq(balancesTable.crypto_type, input.to_crypto)
+        ))
         .execute();
     } else {
-      // Create new balance record
       await db.insert(balancesTable)
         .values({
           user_id: input.user_id,
           crypto_type: input.to_crypto,
-          amount: input.amount.toString(),
+          amount: newToAmount.toString(),
           updated_at: new Date()
         })
         .execute();
     }
 
-    // 5. Create SWAP_FROM transaction record
+    // 6. Create SWAP_FROM transaction
     const swapFromResult = await db.insert(transactionsTable)
       .values({
         user_id: input.user_id,
@@ -96,7 +89,7 @@ export async function swapCrypto(input: SwapCryptoInput): Promise<Transaction[]>
       .returning()
       .execute();
 
-    // 6. Create SWAP_TO transaction record
+    // 7. Create SWAP_TO transaction
     const swapToResult = await db.insert(transactionsTable)
       .values({
         user_id: input.user_id,
@@ -109,8 +102,8 @@ export async function swapCrypto(input: SwapCryptoInput): Promise<Transaction[]>
       .returning()
       .execute();
 
-    // Convert numeric fields back to numbers before returning
-    const transactions: Transaction[] = [
+    // 8. Return both transactions with numeric conversions
+    return [
       {
         ...swapFromResult[0],
         amount: parseFloat(swapFromResult[0].amount)
@@ -120,10 +113,8 @@ export async function swapCrypto(input: SwapCryptoInput): Promise<Transaction[]>
         amount: parseFloat(swapToResult[0].amount)
       }
     ];
-
-    return transactions;
   } catch (error) {
     console.error('Crypto swap failed:', error);
     throw error;
   }
-}
+};

@@ -24,7 +24,7 @@ export const getMiningSession = async (input: GetMiningSessionInput): Promise<Mi
       mining_balance: parseFloat(session.mining_balance) // Convert numeric to number
     };
   } catch (error) {
-    console.error('Get mining session failed:', error);
+    console.error('Mining session retrieval failed:', error);
     throw error;
   }
 };

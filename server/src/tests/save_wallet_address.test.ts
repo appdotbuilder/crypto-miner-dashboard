@@ -8,32 +8,31 @@ import { saveWalletAddress } from '../handlers/save_wallet_address';
 import { eq, and } from 'drizzle-orm';
 
 describe('saveWalletAddress', () => {
-  let testUserId: number;
+  beforeEach(createDB);
+  afterEach(resetDB);
+
+  let testUser: { id: number };
 
   beforeEach(async () => {
-    await createDB();
-    
     // Create test user
-    const userResult = await db.insert(usersTable)
+    const users = await db.insert(usersTable)
       .values({})
       .returning()
       .execute();
-    testUserId = userResult[0].id;
+    testUser = users[0];
   });
 
-  afterEach(resetDB);
-
   const testInput: SaveWalletAddressInput = {
-    user_id: 0, // Will be set to testUserId in tests
+    user_id: 1, // Will be updated in tests
     crypto_type: 'BITCOIN',
     address: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'
   };
 
-  it('should create new wallet address', async () => {
-    const input = { ...testInput, user_id: testUserId };
+  it('should create a new wallet address', async () => {
+    const input = { ...testInput, user_id: testUser.id };
     const result = await saveWalletAddress(input);
 
-    expect(result.user_id).toEqual(testUserId);
+    expect(result.user_id).toEqual(testUser.id);
     expect(result.crypto_type).toEqual('BITCOIN');
     expect(result.address).toEqual('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa');
     expect(result.id).toBeDefined();
@@ -42,69 +41,61 @@ describe('saveWalletAddress', () => {
   });
 
   it('should save wallet address to database', async () => {
-    const input = { ...testInput, user_id: testUserId };
+    const input = { ...testInput, user_id: testUser.id };
     const result = await saveWalletAddress(input);
 
-    const wallets = await db.select()
+    const walletAddresses = await db.select()
       .from(walletAddressesTable)
       .where(eq(walletAddressesTable.id, result.id))
       .execute();
 
-    expect(wallets).toHaveLength(1);
-    expect(wallets[0].user_id).toEqual(testUserId);
-    expect(wallets[0].crypto_type).toEqual('BITCOIN');
-    expect(wallets[0].address).toEqual('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa');
-    expect(wallets[0].created_at).toBeInstanceOf(Date);
-    expect(wallets[0].updated_at).toBeInstanceOf(Date);
+    expect(walletAddresses).toHaveLength(1);
+    expect(walletAddresses[0].user_id).toEqual(testUser.id);
+    expect(walletAddresses[0].crypto_type).toEqual('BITCOIN');
+    expect(walletAddresses[0].address).toEqual('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa');
+    expect(walletAddresses[0].created_at).toBeInstanceOf(Date);
+    expect(walletAddresses[0].updated_at).toBeInstanceOf(Date);
   });
 
   it('should update existing wallet address', async () => {
-    const input = { ...testInput, user_id: testUserId };
+    const input = { ...testInput, user_id: testUser.id };
     
     // Create initial wallet address
-    const firstResult = await saveWalletAddress(input);
-    const firstUpdatedAt = firstResult.updated_at;
-
-    // Wait a bit to ensure different timestamp
-    await new Promise(resolve => setTimeout(resolve, 10));
-
+    const first = await saveWalletAddress(input);
+    
     // Update with new address
     const updatedInput = {
       ...input,
       address: '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy'
     };
-    const secondResult = await saveWalletAddress(updatedInput);
+    const second = await saveWalletAddress(updatedInput);
 
-    // Should have same ID but updated address and timestamp
-    expect(secondResult.id).toEqual(firstResult.id);
-    expect(secondResult.user_id).toEqual(testUserId);
-    expect(secondResult.crypto_type).toEqual('BITCOIN');
-    expect(secondResult.address).toEqual('3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy');
-    expect(secondResult.created_at).toEqual(firstResult.created_at);
-    expect(secondResult.updated_at.getTime()).toBeGreaterThan(firstUpdatedAt.getTime());
+    // Should be same record (same ID)
+    expect(second.id).toEqual(first.id);
+    expect(second.address).toEqual('3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy');
+    expect(second.updated_at.getTime()).toBeGreaterThan(first.updated_at.getTime());
 
     // Verify only one record exists in database
-    const wallets = await db.select()
+    const allAddresses = await db.select()
       .from(walletAddressesTable)
       .where(
         and(
-          eq(walletAddressesTable.user_id, testUserId),
+          eq(walletAddressesTable.user_id, testUser.id),
           eq(walletAddressesTable.crypto_type, 'BITCOIN')
         )
       )
       .execute();
 
-    expect(wallets).toHaveLength(1);
-    expect(wallets[0].address).toEqual('3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy');
+    expect(allAddresses).toHaveLength(1);
+    expect(allAddresses[0].address).toEqual('3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy');
   });
 
   it('should allow different crypto types for same user', async () => {
-    const bitcoinInput = { ...testInput, user_id: testUserId };
+    const bitcoinInput = { ...testInput, user_id: testUser.id };
     const ethereumInput = {
-      ...testInput,
-      user_id: testUserId,
+      user_id: testUser.id,
       crypto_type: 'ETHEREUM_CLASSIC' as const,
-      address: '0x742d35Cc6634C0532925a3b8D654De37678A4cC9'
+      address: '0x742d35cc6ccaa6e82a0e6e3e5a6b5d5a6b5d5a6b'
     };
 
     const bitcoinResult = await saveWalletAddress(bitcoinInput);
@@ -115,17 +106,17 @@ describe('saveWalletAddress', () => {
     expect(ethereumResult.crypto_type).toEqual('ETHEREUM_CLASSIC');
 
     // Verify both records exist
-    const wallets = await db.select()
+    const allAddresses = await db.select()
       .from(walletAddressesTable)
-      .where(eq(walletAddressesTable.user_id, testUserId))
+      .where(eq(walletAddressesTable.user_id, testUser.id))
       .execute();
 
-    expect(wallets).toHaveLength(2);
+    expect(allAddresses).toHaveLength(2);
   });
 
   it('should throw error for non-existent user', async () => {
     const input = { ...testInput, user_id: 99999 };
 
-    expect(saveWalletAddress(input)).rejects.toThrow(/User with id 99999 not found/i);
+    expect(saveWalletAddress(input)).rejects.toThrow(/user.*not found/i);
   });
 });

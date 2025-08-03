@@ -13,7 +13,7 @@ export const getUserWalletAddresses = async (input: GetUserWalletAddressesInput)
 
     return results;
   } catch (error) {
-    console.error('Failed to get user wallet addresses:', error);
+    console.error('Get user wallet addresses failed:', error);
     throw error;
   }
 };

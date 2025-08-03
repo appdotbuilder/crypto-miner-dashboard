@@ -17,7 +17,7 @@ export const saveWalletAddress = async (input: SaveWalletAddressInput): Promise<
     }
 
     // Check if wallet address already exists for this user and crypto type
-    const existingWallet = await db.select()
+    const existingAddress = await db.select()
       .from(walletAddressesTable)
       .where(
         and(
@@ -27,20 +27,20 @@ export const saveWalletAddress = async (input: SaveWalletAddressInput): Promise<
       )
       .execute();
 
-    if (existingWallet.length > 0) {
-      // Update existing wallet address
+    if (existingAddress.length > 0) {
+      // Update existing address
       const result = await db.update(walletAddressesTable)
         .set({
           address: input.address,
           updated_at: new Date()
         })
-        .where(eq(walletAddressesTable.id, existingWallet[0].id))
+        .where(eq(walletAddressesTable.id, existingAddress[0].id))
         .returning()
         .execute();
 
       return result[0];
     } else {
-      // Create new wallet address
+      // Create new address
       const result = await db.insert(walletAddressesTable)
         .values({
           user_id: input.user_id,

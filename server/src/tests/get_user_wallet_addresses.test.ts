@@ -6,110 +6,135 @@ import { usersTable, walletAddressesTable } from '../db/schema';
 import { type GetUserWalletAddressesInput } from '../schema';
 import { getUserWalletAddresses } from '../handlers/get_user_wallet_addresses';
 
-const testInput: GetUserWalletAddressesInput = {
-  user_id: 1
-};
-
 describe('getUserWalletAddresses', () => {
   beforeEach(createDB);
   afterEach(resetDB);
 
-  it('should return empty array for user with no wallet addresses', async () => {
-    // Create user
-    await db.insert(usersTable).values({}).execute();
+  let testUserId: number;
+  let otherUserId: number;
 
-    const result = await getUserWalletAddresses(testInput);
+  beforeEach(async () => {
+    // Create test users
+    const users = await db.insert(usersTable)
+      .values([{}, {}])
+      .returning()
+      .execute();
+    
+    testUserId = users[0].id;
+    otherUserId = users[1].id;
+  });
 
+  it('should return all wallet addresses for a user', async () => {
+    // Create test wallet addresses for the user
+    await db.insert(walletAddressesTable)
+      .values([
+        {
+          user_id: testUserId,
+          crypto_type: 'BITCOIN',
+          address: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'
+        },
+        {
+          user_id: testUserId,
+          crypto_type: 'ETHEREUM_CLASSIC',
+          address: '0x742d35cc6861c4532d71b4c76c95b4e4f2c2e6c6'
+        },
+        {
+          user_id: testUserId,
+          crypto_type: 'SOLANA',
+          address: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU'
+        }
+      ])
+      .execute();
+
+    // Create wallet address for other user (should not be returned)
+    await db.insert(walletAddressesTable)
+      .values({
+        user_id: otherUserId,
+        crypto_type: 'BITCOIN',
+        address: '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2'
+      })
+      .execute();
+
+    const input: GetUserWalletAddressesInput = {
+      user_id: testUserId
+    };
+
+    const result = await getUserWalletAddresses(input);
+
+    // Should return exactly 3 addresses for the test user
+    expect(result).toHaveLength(3);
+
+    // Verify all addresses belong to the correct user
+    result.forEach(address => {
+      expect(address.user_id).toEqual(testUserId);
+      expect(address.id).toBeDefined();
+      expect(address.crypto_type).toBeDefined();
+      expect(address.address).toBeDefined();
+      expect(address.created_at).toBeInstanceOf(Date);
+      expect(address.updated_at).toBeInstanceOf(Date);
+    });
+
+    // Verify specific crypto types are present
+    const cryptoTypes = result.map(addr => addr.crypto_type);
+    expect(cryptoTypes).toContain('BITCOIN');
+    expect(cryptoTypes).toContain('ETHEREUM_CLASSIC');
+    expect(cryptoTypes).toContain('SOLANA');
+  });
+
+  it('should return empty array when user has no wallet addresses', async () => {
+    const input: GetUserWalletAddressesInput = {
+      user_id: testUserId
+    };
+
+    const result = await getUserWalletAddresses(input);
+
+    expect(result).toHaveLength(0);
     expect(result).toEqual([]);
   });
 
-  it('should return wallet addresses for user', async () => {
-    // Create user
-    await db.insert(usersTable).values({}).execute();
+  it('should return empty array for non-existent user', async () => {
+    const input: GetUserWalletAddressesInput = {
+      user_id: 99999 // Non-existent user ID
+    };
 
-    // Create wallet addresses
-    await db.insert(walletAddressesTable).values([
-      {
-        user_id: 1,
-        crypto_type: 'BITCOIN',
-        address: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'
-      },
-      {
-        user_id: 1,
-        crypto_type: 'ETHEREUM_CLASSIC',
-        address: '0x742d35Cc6634C0532925a3b8D7d2dDc4d3c8b1DB'
-      }
-    ]).execute();
+    const result = await getUserWalletAddresses(input);
 
-    const result = await getUserWalletAddresses(testInput);
-
-    expect(result).toHaveLength(2);
-    
-    const bitcoinAddress = result.find(addr => addr.crypto_type === 'BITCOIN');
-    expect(bitcoinAddress).toBeDefined();
-    expect(bitcoinAddress!.address).toEqual('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa');
-    expect(bitcoinAddress!.user_id).toEqual(1);
-    expect(bitcoinAddress!.id).toBeDefined();
-    expect(bitcoinAddress!.created_at).toBeInstanceOf(Date);
-    expect(bitcoinAddress!.updated_at).toBeInstanceOf(Date);
-
-    const ethAddress = result.find(addr => addr.crypto_type === 'ETHEREUM_CLASSIC');
-    expect(ethAddress).toBeDefined();
-    expect(ethAddress!.address).toEqual('0x742d35Cc6634C0532925a3b8D7d2dDc4d3c8b1DB');
-    expect(ethAddress!.user_id).toEqual(1);
+    expect(result).toHaveLength(0);
+    expect(result).toEqual([]);
   });
 
-  it('should only return addresses for specified user', async () => {
-    // Create two users
-    await db.insert(usersTable).values([{}, {}]).execute();
-
+  it('should only return addresses for the specified user', async () => {
     // Create wallet addresses for both users
-    await db.insert(walletAddressesTable).values([
-      {
-        user_id: 1,
-        crypto_type: 'BITCOIN',
-        address: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'
-      },
-      {
-        user_id: 2,
-        crypto_type: 'BITCOIN',
-        address: '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2'
-      }
-    ]).execute();
+    await db.insert(walletAddressesTable)
+      .values([
+        {
+          user_id: testUserId,
+          crypto_type: 'BITCOIN',
+          address: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'
+        },
+        {
+          user_id: otherUserId,
+          crypto_type: 'BITCOIN',
+          address: '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2'
+        },
+        {
+          user_id: otherUserId,
+          crypto_type: 'ETHEREUM_CLASSIC',
+          address: '0x742d35cc6861c4532d71b4c76c95b4e4f2c2e6c6'
+        }
+      ])
+      .execute();
 
-    const result = await getUserWalletAddresses(testInput);
+    const input: GetUserWalletAddressesInput = {
+      user_id: testUserId
+    };
 
+    const result = await getUserWalletAddresses(input);
+
+    // Should only return addresses for testUserId
     expect(result).toHaveLength(1);
-    expect(result[0].user_id).toEqual(1);
+    expect(result[0].user_id).toEqual(testUserId);
+    expect(result[0].crypto_type).toEqual('BITCOIN');
     expect(result[0].address).toEqual('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa');
-  });
-
-  it('should return multiple addresses for same crypto type', async () => {
-    // Create user
-    await db.insert(usersTable).values({}).execute();
-
-    // Create multiple Bitcoin addresses
-    await db.insert(walletAddressesTable).values([
-      {
-        user_id: 1,
-        crypto_type: 'BITCOIN',
-        address: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'
-      },
-      {
-        user_id: 1,
-        crypto_type: 'BITCOIN',
-        address: '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2'
-      }
-    ]).execute();
-
-    const result = await getUserWalletAddresses(testInput);
-
-    expect(result).toHaveLength(2);
-    expect(result.every(addr => addr.crypto_type === 'BITCOIN')).toBe(true);
-    expect(result.every(addr => addr.user_id === 1)).toBe(true);
-    
-    const addresses = result.map(addr => addr.address);
-    expect(addresses).toContain('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa');
-    expect(addresses).toContain('1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2');
   });
 });

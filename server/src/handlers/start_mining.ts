@@ -1,69 +1,51 @@
 
 import { db } from '../db';
-import { miningSessionsTable, usersTable } from '../db/schema';
+import { miningSessionsTable } from '../db/schema';
 import { type StartMiningInput, type MiningSession } from '../schema';
 import { eq } from 'drizzle-orm';
 
 export const startMining = async (input: StartMiningInput): Promise<MiningSession> => {
   try {
-    // Verify user exists
-    const user = await db.select()
-      .from(usersTable)
-      .where(eq(usersTable.id, input.user_id))
-      .execute();
-
-    if (user.length === 0) {
-      throw new Error(`User with id ${input.user_id} not found`);
-    }
-
     // Check if user has an existing mining session
     const existingSessions = await db.select()
       .from(miningSessionsTable)
       .where(eq(miningSessionsTable.user_id, input.user_id))
       .execute();
 
-    if (existingSessions.length > 0) {
-      const existingSession = existingSessions[0];
-      
-      // If already active, throw error
-      if (existingSession.status === 'ACTIVE') {
-        throw new Error('Mining session is already active');
-      }
+    let result;
 
-      // Update existing session to active
-      const result = await db.update(miningSessionsTable)
+    if (existingSessions.length > 0) {
+      // Update existing session to ACTIVE status
+      const sessionId = existingSessions[0].id;
+      const updateResult = await db.update(miningSessionsTable)
         .set({
           status: 'ACTIVE',
-          started_at: new Date(),
-          stopped_at: null
+          started_at: new Date()
         })
-        .where(eq(miningSessionsTable.id, existingSession.id))
+        .where(eq(miningSessionsTable.id, sessionId))
         .returning()
         .execute();
-
-      const updatedSession = result[0];
-      return {
-        ...updatedSession,
-        mining_balance: parseFloat(updatedSession.mining_balance)
-      };
+      
+      result = updateResult[0];
+    } else {
+      // Create new mining session
+      const insertResult = await db.insert(miningSessionsTable)
+        .values({
+          user_id: input.user_id,
+          status: 'ACTIVE',
+          mining_balance: '0', // Convert number to string for numeric column
+          started_at: new Date()
+        })
+        .returning()
+        .execute();
+      
+      result = insertResult[0];
     }
 
-    // Create new mining session
-    const result = await db.insert(miningSessionsTable)
-      .values({
-        user_id: input.user_id,
-        status: 'ACTIVE',
-        mining_balance: '0',
-        started_at: new Date(),
-        stopped_at: null
-      })
-      .returning()
-      .execute();
-
-    const newSession = result[0];
+    // Convert numeric fields back to numbers before returning
     return {
-      ...newSession,
-      mining_balance: parseFloat(newSession.mining_balance)
+      ...result,
+      mining_balance: parseFloat(result.mining_balance)
     };
   } catch (error) {
     console.error('Mining start failed:', error);

@@ -15,7 +15,7 @@ describe('getMiningSession', () => {
   afterEach(resetDB);
 
   it('should return null when no mining session exists', async () => {
-    // Create user first
+    // Create a user but no mining session
     await db.insert(usersTable).values({}).execute();
 
     const result = await getMiningSession(testInput);
@@ -24,91 +24,105 @@ describe('getMiningSession', () => {
   });
 
   it('should return the latest mining session for a user', async () => {
-    // Create user first
+    // Create a user
     await db.insert(usersTable).values({}).execute();
 
-    // Create mining session
-    const sessionData = {
-      user_id: 1,
-      status: 'ACTIVE' as const,
-      mining_balance: '0.00123456', // Numeric field as string
-      started_at: new Date(),
-      stopped_at: null
-    };
+    // Create multiple mining sessions with different timestamps
+    const session1 = await db.insert(miningSessionsTable)
+      .values({
+        user_id: 1,
+        status: 'STOPPED',
+        mining_balance: '0.001',
+        started_at: new Date(Date.now() - 7200000), // 2 hours ago
+        stopped_at: new Date(Date.now() - 3600000), // 1 hour ago
+        created_at: new Date(Date.now() - 7200000) // 2 hours ago
+      })
+      .returning()
+      .execute();
 
+    const session2 = await db.insert(miningSessionsTable)
+      .values({
+        user_id: 1,
+        status: 'ACTIVE',
+        mining_balance: '0.005',
+        started_at: new Date(Date.now() - 1800000), // 30 minutes ago
+        stopped_at: null,
+        created_at: new Date(Date.now() - 1800000) // 30 minutes ago (latest)
+      })
+      .returning()
+      .execute();
+
+    const result = await getMiningSession(testInput);
+
+    // Should return the latest session (session2)
+    expect(result).not.toBeNull();
+    expect(result!.id).toEqual(session2[0].id);
+    expect(result!.user_id).toEqual(1);
+    expect(result!.status).toEqual('ACTIVE');
+    expect(result!.mining_balance).toEqual(0.005);
+    expect(typeof result!.mining_balance).toEqual('number');
+    expect(result!.started_at).toBeInstanceOf(Date);
+    expect(result!.stopped_at).toBeNull();
+    expect(result!.created_at).toBeInstanceOf(Date);
+  });
+
+  it('should return correct mining session with all field types', async () => {
+    // Create a user
+    await db.insert(usersTable).values({}).execute();
+
+    // Create a mining session with all fields populated
+    const startedAt = new Date(Date.now() - 3600000);
+    const stoppedAt = new Date();
+    
     await db.insert(miningSessionsTable)
-      .values(sessionData)
+      .values({
+        user_id: 1,
+        status: 'STOPPED',
+        mining_balance: '10.12345678',
+        started_at: startedAt,
+        stopped_at: stoppedAt
+      })
       .execute();
 
     const result = await getMiningSession(testInput);
 
     expect(result).not.toBeNull();
     expect(result!.user_id).toEqual(1);
-    expect(result!.status).toEqual('ACTIVE');
-    expect(result!.mining_balance).toEqual(0.00123456);
-    expect(typeof result!.mining_balance).toEqual('number');
+    expect(result!.status).toEqual('STOPPED');
+    expect(result!.mining_balance).toEqual(10.12345678);
     expect(result!.started_at).toBeInstanceOf(Date);
-    expect(result!.stopped_at).toBeNull();
+    expect(result!.stopped_at).toBeInstanceOf(Date);
     expect(result!.created_at).toBeInstanceOf(Date);
-    expect(result!.id).toBeDefined();
-  });
-
-  it('should return the most recent session when multiple exist', async () => {
-    // Create user first
-    await db.insert(usersTable).values({}).execute();
-
-    // Create older session
-    const olderDate = new Date(Date.now() - 86400000); // 1 day ago
-    await db.insert(miningSessionsTable)
-      .values({
-        user_id: 1,
-        status: 'STOPPED' as const,
-        mining_balance: '0.001',
-        started_at: olderDate,
-        stopped_at: olderDate,
-        created_at: olderDate
-      })
-      .execute();
-
-    // Create newer session
-    const newerDate = new Date();
-    await db.insert(miningSessionsTable)
-      .values({
-        user_id: 1,
-        status: 'ACTIVE' as const,
-        mining_balance: '0.002',
-        started_at: newerDate,
-        stopped_at: null,
-        created_at: newerDate
-      })
-      .execute();
-
-    const result = await getMiningSession(testInput);
-
-    expect(result).not.toBeNull();
-    expect(result!.status).toEqual('ACTIVE');
-    expect(result!.mining_balance).toEqual(0.002);
-    expect(result!.created_at.getTime()).toBeGreaterThan(olderDate.getTime());
   });
 
   it('should only return sessions for the specified user', async () => {
     // Create two users
-    await db.insert(usersTable).values({}).execute();
-    await db.insert(usersTable).values({}).execute();
+    await db.insert(usersTable).values({}).execute(); // user_id: 1
+    await db.insert(usersTable).values({}).execute(); // user_id: 2
 
-    // Create session for user 2
+    // Create mining sessions for both users
     await db.insert(miningSessionsTable)
       .values({
-        user_id: 2,
-        status: 'ACTIVE' as const,
-        mining_balance: '0.005',
-        started_at: new Date()
+        user_id: 1,
+        status: 'ACTIVE',
+        mining_balance: '0.001'
       })
       .execute();
 
-    // Query for user 1 (should return null)
-    const result = await getMiningSession({ user_id: 1 });
+    await db.insert(miningSessionsTable)
+      .values({
+        user_id: 2,
+        status: 'STOPPED',
+        mining_balance: '0.002'
+      })
+      .execute();
 
-    expect(result).toBeNull();
+    // Query for user 2's session
+    const result = await getMiningSession({ user_id: 2 });
+
+    expect(result).not.toBeNull();
+    expect(result!.user_id).toEqual(2);
+    expect(result!.status).toEqual('STOPPED');
+    expect(result!.mining_balance).toEqual(0.002);
   });
 });

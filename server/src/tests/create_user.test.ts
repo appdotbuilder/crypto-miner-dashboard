@@ -34,7 +34,7 @@ describe('createUser', () => {
     expect(users[0].created_at).toBeInstanceOf(Date);
   });
 
-  it('should initialize balances for all cryptocurrency types', async () => {
+  it('should initialize balances for all crypto types', async () => {
     const result = await createUser(testInput);
 
     const balances = await db.select()
@@ -45,16 +45,14 @@ describe('createUser', () => {
     const cryptoTypes = cryptoTypeSchema.options;
     expect(balances).toHaveLength(cryptoTypes.length);
 
-    // Verify each crypto type has a balance initialized to 0
-    const balanceMap = new Map(balances.map(b => [b.crypto_type, parseFloat(b.amount)]));
-    
-    cryptoTypes.forEach(cryptoType => {
-      expect(balanceMap.has(cryptoType)).toBe(true);
-      expect(balanceMap.get(cryptoType)).toBe(0);
-    });
+    // Check that all crypto types are initialized with 0 balance
+    const balanceCryptoTypes = balances.map(b => b.crypto_type).sort();
+    const expectedCryptoTypes = cryptoTypes.slice().sort();
+    expect(balanceCryptoTypes).toEqual(expectedCryptoTypes);
 
-    // Verify all balances belong to the created user
+    // Verify all balances are initialized to 0
     balances.forEach(balance => {
+      expect(parseFloat(balance.amount)).toEqual(0);
       expect(balance.user_id).toEqual(result.id);
       expect(balance.updated_at).toBeInstanceOf(Date);
     });
@@ -66,22 +64,23 @@ describe('createUser', () => {
 
     expect(user1.id).not.toEqual(user2.id);
 
-    // Check both users have their own complete set of balances
+    // Check user1 balances
     const user1Balances = await db.select()
       .from(balancesTable)
       .where(eq(balancesTable.user_id, user1.id))
       .execute();
 
+    // Check user2 balances
     const user2Balances = await db.select()
       .from(balancesTable)
       .where(eq(balancesTable.user_id, user2.id))
       .execute();
 
-    const cryptoTypes = cryptoTypeSchema.options;
-    expect(user1Balances).toHaveLength(cryptoTypes.length);
-    expect(user2Balances).toHaveLength(cryptoTypes.length);
+    const cryptoTypesCount = cryptoTypeSchema.options.length;
+    expect(user1Balances).toHaveLength(cryptoTypesCount);
+    expect(user2Balances).toHaveLength(cryptoTypesCount);
 
-    // Verify no cross-contamination of user balances
+    // Ensure balances are separate for each user
     user1Balances.forEach(balance => {
       expect(balance.user_id).toEqual(user1.id);
     });
